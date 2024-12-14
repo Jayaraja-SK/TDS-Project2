@@ -13,6 +13,7 @@
 # ]
 # ///
 
+# Import necessary libraries
 import os
 import pandas as pd
 import seaborn as sns
@@ -20,151 +21,151 @@ import matplotlib.pyplot as plt
 import requests
 import argparse
 
-# Ensure environment variable for API Token is set
-API_ACCESS_TOKEN = os.environ.get("AIPROXY_TOKEN")
-if not API_ACCESS_TOKEN:
-    print("Error: API_ACCESS_TOKEN environment variable is not set.")
+# Ensure environment variable for AI Proxy Token is set
+AIPROXY_TOKEN = os.environ.get("AIPROXY_TOKEN")
+if not AIPROXY_TOKEN:
+    print("Error: AIPROXY_TOKEN environment variable is not set.")
     exit(1)
 
-# Headers for API requests
-API_ENDPOINT = "http://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
-REQUEST_HEADERS = {
+# Headers for AI Proxy requests
+AIPROXY_URL = "http://aiproxy.sanand.workers.dev/openai/v1/chat/completions"
+HEADERS = {
     "Content-Type": "application/json",
-    "Authorization": f"Bearer {API_ACCESS_TOKEN}"
+    "Authorization": f"Bearer {AIPROXY_TOKEN}"
 }
 
-def send_request_to_model(chat_history, temp=0.7, max_output=500):
-    """ Send a request to the AI model via API. """
-    request_body = {
+def query_language_model(messages, temperature=0.7, max_tokens=500):
+    """ Query the Language Model via AI Proxy. """
+    payload = {
         "model": "gpt-4o-mini",
-        "messages": chat_history,
-        "temperature": temp,
-        "max_tokens": max_output
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens
     }
-    response = requests.post(API_ENDPOINT, headers=REQUEST_HEADERS, json=request_body)
+    response = requests.post(AIPROXY_URL, headers=HEADERS, json=payload)
     if response.status_code == 200:
         return response.json()["choices"][0]["message"]["content"]
     else:
-        print(f"Error during model request: {response.status_code}\n{response.text}")
+        print(f"Error querying LLM: {response.status_code}\n{response.text}")
         exit(1)
 
-def process_csv_file(file_path, results_folder):
-    """ Perform analysis on the CSV file and return summarized details. """
+def perform_dataset_analysis(csv_filename, output_dir):
+    """ Analyze the dataset and return a summary. """
     try:
-        # Load the CSV data
-        data_frame = pd.read_csv(file_path, encoding="ISO-8859-1")
-    except Exception as error:
-        print(f"Error reading the CSV file: {error}")
+        # Load the dataset
+        df = pd.read_csv(csv_filename, encoding="ISO-8859-1")
+    except Exception as e:
+        print(f"Error loading CSV: {e}")
         exit(1)
 
-    # Summary details about the dataset
-    dataset_summary = {
-        "total_rows": len(data_frame),
-        "total_columns": len(data_frame.columns),
-        "column_types": data_frame.dtypes.to_dict(),
-        "null_values": data_frame.isnull().sum().to_dict(),
-        "sample_records": data_frame.head(5).to_dict()
+    # Basic information about the dataset
+    summary = {
+        "num_rows": len(df),
+        "num_columns": len(df.columns),
+        "columns": df.dtypes.to_dict(),
+        "missing_values": df.isnull().sum().to_dict(),
+        "sample_data": df.head(5).to_dict()
     }
 
-    # Extract numerical columns
-    numeric_columns = data_frame.select_dtypes(include="number").columns
+    # Filter numerical columns
+    numerical_cols = df.select_dtypes(include="number").columns
 
-    if len(numeric_columns) > 0:
-        # Create a heatmap for the correlation matrix
-        correlation_data = data_frame[numeric_columns].corr()
-        sns.heatmap(correlation_data, annot=True, cmap="coolwarm")
-        plt.title("Feature Correlation Matrix")
-        plt.savefig(os.path.join(results_folder, "correlation_matrix_plot.png"))
+    if len(numerical_cols) > 0:
+        # Generate correlation matrix for numerical columns
+        correlation_matrix = df[numerical_cols].corr()
+        sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm")
+        plt.title("Correlation Matrix")
+        plt.savefig(os.path.join(output_dir, "correlation_matrix.png"))
         plt.close()
 
-        # Generate a histogram for the first numerical feature
-        sns.histplot(data_frame[numeric_columns[0]].dropna(), kde=True, color="green")
-        plt.title(f"Distribution of {numeric_columns[0]}")
-        plt.savefig(os.path.join(results_folder, "distribution_histogram.png"))
+        # Generate a distribution plot for the first numerical column
+        sns.histplot(df[numerical_cols[0]].dropna(), kde=True, color="blue")
+        plt.title(f"Distribution of {numerical_cols[0]}")
+        plt.savefig(os.path.join(output_dir, "distribution_plot.png"))
         plt.close()
 
-        # Create a scatter plot for the first two numerical columns if available
-        if len(numeric_columns) > 1:
-            sns.scatterplot(x=data_frame[numeric_columns[0]], y=data_frame[numeric_columns[1]])
-            plt.title(f"Scatter Plot: {numeric_columns[0]} vs {numeric_columns[1]}")
-            plt.savefig(os.path.join(results_folder, "scatter_plot_chart.png"))
+        # Generate a scatter plot for the first two numerical columns (if available)
+        if len(numerical_cols) > 1:
+            sns.scatterplot(x=df[numerical_cols[0]], y=df[numerical_cols[1]])
+            plt.title(f"Scatter Plot: {numerical_cols[0]} vs {numerical_cols[1]}")
+            plt.savefig(os.path.join(output_dir, "scatter_plot.png"))
             plt.close()
 
-        # Create a pair plot for all numerical features
-        sns.pairplot(data_frame[numeric_columns])
-        plt.suptitle("Pairwise Relationships of Numerical Features", y=1.02)
-        plt.savefig(os.path.join(results_folder, "pairwise_relationship_plot.png"))
+        # Generate a pair plot for numerical columns
+        sns.pairplot(df[numerical_cols])
+        plt.suptitle("Pair Plot for Numerical Columns", y=1.02)
+        plt.savefig(os.path.join(output_dir, "pair_plot.png"))
         plt.close()
     else:
-        print("No numerical columns were found for analysis.")
+        print("No numerical columns available for analysis.")
 
-    # Heatmap for missing values
-    sns.heatmap(data_frame.isnull(), cbar=False, cmap="viridis")
-    plt.title("Missing Data Heatmap")
-    plt.savefig(os.path.join(results_folder, "missing_data_heatmap.png"))
+    # Missing data heatmap
+    sns.heatmap(df.isnull(), cbar=False, cmap="viridis")
+    plt.title("Missing Values Heatmap")
+    plt.savefig(os.path.join(output_dir, "missing_values_heatmap.png"))
     plt.close()
 
-    return dataset_summary
+    return summary
 
-def create_report_file(summary_data, generated_analysis, results_folder):
-    """ Generate a markdown file summarizing the analysis. """
-    report_content = """# Dataset Analysis Report
+def create_analysis_document(data_summary, analysis_narrative, output_dir):
+    """ Generate README.md with analysis narrative and references to charts. """
+    readme_content = """# Automated Dataset Analysis
 
-## Overview
-- Total Rows: {total_rows}
-- Total Columns: {total_columns}
+## Dataset Summary
+- Number of Rows: {num_rows}
+- Number of Columns: {num_columns}
 
-### Column Details:
-{column_details}
+### Columns and Data Types:
+{columns}
 
-## Insights from Analysis
-{analysis_text}
+## Analysis Narrative
+{narrative}
 
 ## Visualizations
-1. Correlation Matrix: ![Correlation Matrix](correlation_matrix_plot.png)
-2. Histogram: ![Distribution Histogram](distribution_histogram.png)
-3. Scatter Plot: ![Scatter Plot](scatter_plot_chart.png)
-4. Pairwise Relationships: ![Pair Plot](pairwise_relationship_plot.png)
-5. Missing Data Heatmap: ![Missing Data Heatmap](missing_data_heatmap.png)
+1. Correlation Matrix: ![Correlation Matrix](correlation_matrix.png)
+2. Distribution Plot: ![Distribution Plot](distribution_plot.png)
+3. Scatter Plot: ![Scatter Plot](scatter_plot.png)
+4. Pair Plot: ![Pair Plot](pair_plot.png)
+5. Missing Values Heatmap: ![Missing Values Heatmap](missing_values_heatmap.png)
 """.format(
-        total_rows=summary_data['total_rows'],
-        total_columns=summary_data['total_columns'],
-        column_details="\n".join([f"- {col_name}: {col_type}" for col_name, col_type in summary_data["column_types"].items()]),
-        analysis_text=generated_analysis
+        num_rows=data_summary['num_rows'],
+        num_columns=data_summary['num_columns'],
+        columns="\n".join([f"- {col}: {dtype}" for col, dtype in data_summary["columns"].items()]),
+        narrative=analysis_narrative
     )
 
-    with open(os.path.join(results_folder, "README.md"), "w") as report_file:
-        report_file.write(report_content)
+    with open(os.path.join(output_dir, "README.md"), "w") as f:
+        f.write(readme_content)
 
-def execute_analysis():
-    # Parse command-line inputs
-    argument_parser = argparse.ArgumentParser(description="Dataset Analysis Automation")
-    argument_parser.add_argument("csv_file", help="Path to the CSV file for analysis")
-    args = argument_parser.parse_args()
+def main():
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Automated Dataset Analysis")
+    parser.add_argument("csv_filename", help="Path to the CSV file to analyze")
+    args = parser.parse_args()
 
-    # Create a directory for the results
-    file_basename = os.path.splitext(os.path.basename(args.csv_file))[0]
-    result_directory = os.path.join(os.getcwd(), file_basename)
-    os.makedirs(result_directory, exist_ok=True)
+    # Create output directory
+    dataset_name = os.path.splitext(os.path.basename(args.csv_filename))[0]
+    output_dir = os.path.join(os.getcwd(), dataset_name)
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Step 1: Perform analysis on the dataset
-    print("Performing dataset analysis...")
-    analysis_summary = process_csv_file(args.csv_file, result_directory)
+    # Step 1: Analyze the dataset
+    print("Analyzing dataset...")
+    data_summary = perform_dataset_analysis(args.csv_filename, output_dir)
 
-    # Step 2: Request narrative generation from the model
-    print("Generating insights via AI...")
-    chat_history = [
-        {"role": "system", "content": "You are an expert data analyst."},
-        {"role": "user", "content": f"Provide insights based on this dataset summary: {analysis_summary}. Keep it concise and informative."}
+    # Step 2: Query LLM for narrative
+    print("Generating narrative using LLM...")
+    llm_messages = [
+        {"role": "system", "content": "You are a data analyst."},
+        {"role": "user", "content": f"Here is a summary of the dataset: {data_summary}. Provide brief and meaningful analysis and insights."}
     ]
     
-    narrative = send_request_to_model(chat_history)
+    analysis_narrative = query_language_model(llm_messages)
 
-    # Step 3: Create a detailed report
-    print("Generating analysis report...")
-    create_report_file(analysis_summary, narrative, result_directory)
+    # Step 3: Generate README.md
+    print("Creating README.md...")
+    create_analysis_document(data_summary, analysis_narrative, output_dir)
 
-    print("Analysis complete. Check the generated report and visualizations.")
+    print("Analysis complete. Check README.md and the generated charts.")
 
 if __name__ == "__main__":
-    execute_analysis()
+    main()
